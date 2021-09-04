@@ -15,21 +15,19 @@ pub type Balance = U256;
 pub type Address = H160;
 // The number of tokens being traded in the pool.
 const N: usize = 2;
+// These constants must be set prior to compiling
 lazy_static!{
     pub static ref ZERO: Balance = U256::zero();
     // The default computation precision.
+    static ref PRECISION: U256 = U256::from(10).pow(18.into());
     // Balances are multiplied by it during invariant computation, to avoid division of integers of the same order of magnitude.
     pub static ref PRECISION_MUL: [U256; N] = [U256::from(1_000_000); N];
     // The maximum known token precision.
     pub static ref MAX_TOKEN_PRECISION: u8 = 18;
-
-    // These constants must be set prior to compiling
     static ref RATES: [U256; N] = [U256::default(); N];
 
     // fixed constants
     static ref FEE_DENOMINATOR: U256 = U256::from(10).pow(10.into());
-    static ref PRECISION: U256 = U256::from(10).pow(18.into());
-
     static ref ADMIN_FEE: U256 = U256::from(10).pow(10.into());
     static ref FEE: U256 = U256::from(10).pow(10.into());
 }
