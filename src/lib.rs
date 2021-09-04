@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#[macro_use]
+extern crate lazy_static;
+
 pub mod exchanges;
 pub mod invariant;
 
@@ -7,29 +11,28 @@ use crate::exchanges::get_y;
 
 // The ETH address in the unsigned integer form.
 pub type Balance = U256;
-
-//The biggest integer type available to store balances
+// The biggest integer type available to store balances
 pub type Address = H160;
-pub const ZERO: Balance = U256::from(0);
-// The default computation precision.
-// Balances are multiplied by it during invariant computation,
-// to avoid division of integers of the same order of magnitude.
-pub const PRECISION_MUL: [U256; N] = [U256::from(1_000_000);N];
-// The maximum known token precision.
-pub const MAX_TOKEN_PRECISION: u8 = 18;
-
-// These constants must be set prior to compiling
-
 // The number of tokens being traded in the pool.
 const N: usize = 2;
-const RATES:[U256;N] = [U256::default();N];
+lazy_static!{
+    pub static ref ZERO: Balance = U256::zero();
+    // The default computation precision.
+    // Balances are multiplied by it during invariant computation, to avoid division of integers of the same order of magnitude.
+    pub static ref PRECISION_MUL: [U256; N] = [U256::from(1_000_000); N];
+    // The maximum known token precision.
+    pub static ref MAX_TOKEN_PRECISION: u8 = 18;
 
-// fixed constants
-const FEE_DENOMINATOR:U256 = U256::from(10).pow(10.into());
-const PRECISION:U256 = U256::from(10).pow(18.into());
+    // These constants must be set prior to compiling
+    static ref RATES: [U256; N] = [U256::default(); N];
 
-const ADMIN_FEE:U256 = U256::from(10).pow(10.into());
-const FEE:U256 = U256::from(10).pow(10.into());
+    // fixed constants
+    static ref FEE_DENOMINATOR: U256 = U256::from(10).pow(10.into());
+    static ref PRECISION: U256 = U256::from(10).pow(18.into());
+
+    static ref ADMIN_FEE: U256 = U256::from(10).pow(10.into());
+    static ref FEE: U256 = U256::from(10).pow(10.into());
+}
 
 struct StableSwap{
     // The tokens being traded in the pool.
@@ -62,8 +65,8 @@ impl StableSwap {
     }
 
     fn xp(&self) -> [U256;N]{
-        let mut res = RATES;
-        res.iter_mut().enumerate().for_each(|(i,res)|*res= res* self.balances[i]/PRECISION);
+        let mut res = *RATES;
+        res.iter_mut().enumerate().for_each(|(i,res)|*res= *res * self.balances[i] / *PRECISION);
         res
     }
 
@@ -72,7 +75,7 @@ impl StableSwap {
     }
 
     /// Adds liquidity to the contract balances.
-    pub fn add_liquidity(&mut self, amount:[U256;N], min_lp_quantity: [U256;N]) -> U256 {
+    pub fn add_liquidity(&mut self, amount:[U256;N], min_lp_quantity: U256) -> U256 {
         let amp = self.amplifier;
         let old_balances = self.balances;
 
@@ -80,7 +83,7 @@ impl StableSwap {
         let total_supply = self.total_supply;
         let mut new_balances = old_balances;
         for i in 0..N {
-            if total_supply == 0 { assert!(amount[i] > 0)}
+            if total_supply == U256::zero() { assert!(amount[i] > U256::zero())}
             new_balances[i] += amount[i];
         }
 
@@ -89,27 +92,26 @@ impl StableSwap {
 
         let mut d2 = d1;
         let mut fees = [Balance::default();N];
-        let mut lp_quantity = Balance::default();
-        if total_supply > U256::zero(){
-            let fee = FEE * N / (4 * (N - 1));
+        let lp_quantity = if total_supply > U256::zero(){
+            let fee = *FEE * N / (4 * (N - 1));
             for (i, new_balance) in new_balances.iter_mut().enumerate() {
                 let ideal_balance = d1 *old_balances[i] / d0;
-                let difference = if ideal_balance > new_balance{
-                    ideal_balance - new_balance
+                let difference = if ideal_balance > *new_balance{
+                    ideal_balance - *new_balance
                 } else {
-                    new_balance - ideal_balance
+                    *new_balance - ideal_balance
                 };
-                fees[i] = fee * difference / FEE_DENOMINATOR;
-                self.balances[i] = new_balance - (fees[i] * admin_fee / FEE_DENOMINATOR);
-                new_balance[i] -= fees[i];
+                fees[i] = fee * difference / *FEE_DENOMINATOR;
+                self.balances[i] = *new_balance - (fees[i] * *ADMIN_FEE / *FEE_DENOMINATOR);
+                *new_balance -= fees[i];
             }
             d2 = calculate(new_balances, amp);
-            lp_quantity = total_supply * (d2 - d0) / d0;
+            total_supply * (d2 - d0) / d0
         } else {
             self.balances = new_balances;
-            lp_quantity = d1;
-        }
-        assert!(mint_amount >= min_lp_quantity, "Slippage screwed you");
+            d2
+        };
+        assert!(lp_quantity >= min_lp_quantity, "Slippage screwed you");
 
         lp_quantity
     }
@@ -122,11 +124,10 @@ impl StableSwap {
         for (i, balance) in self.balances.iter_mut().enumerate() {
             let value = *balance * amount / total_supply;
             assert!(value >= min_amounts[i], "Withdrawal resulted in fewer coins than expected");
-            *balance = balance - value;
+            *balance = *balance - value;
             amounts[i] = value;
         }
         amounts
-
     }
 
     /// Removes liquidity to the contract balances and withdraw one coins.
@@ -134,7 +135,7 @@ impl StableSwap {
         let (dy, dy_fee, _total_supply) = self.calc_withdraw_coin_lp_by_removing_lp(amount, token_index);
         assert!(dy >= min_amount, "Not enough coins removed");
 
-        self.balances[i] -= (dy + dy_fee * ADMIN_FEE / FEE_DENOMINATOR);
+        self.balances[token_index] -= dy + dy_fee * *ADMIN_FEE / *FEE_DENOMINATOR;
         dy
 
     }
@@ -143,20 +144,20 @@ impl StableSwap {
     /// some of the `withdraw_token_address`.
     pub fn swap(
         &mut self,
-        withdraw_address: Address,
+        deposit_token_address: Address,
         withdraw_token_address: Address,
         min_withdraw: Balance,
-    ) {
-
-        let deposit_idx = self.token_position(Address::from_address(zksync::msg.token_address));
+        dx: U256
+    ) -> U256{
+        let deposit_idx = self.token_position(deposit_token_address);
         let withdraw_idx = self.token_position(withdraw_token_address);
 
         let balance_array = self.balances;
 
-        assert_ne!(balance_array[deposit_idx], 0, "Deposit token balance is zero");
-        assert_ne!(balance_array[withdraw_idx], 0, "Withdraw token balance is zero");
+        assert_ne!(balance_array[deposit_idx], U256::zero(), "Deposit token balance is zero");
+        assert_ne!(balance_array[withdraw_idx], U256::zero(), "Withdraw token balance is zero");
 
-        let new_x = balance_array[deposit_idx] + zksync::msg.amount;
+        let new_x = balance_array[deposit_idx] + dx;
         let new_y = exchanges::get_y(
             balance_array,
             self.amplifier,
@@ -168,20 +169,22 @@ impl StableSwap {
         );
 
         let old_y = balance_array[withdraw_idx];
-        assert!(old_y >= min_withdraw + new_y,
-            "Exchange resulted in fewer coins than expected");
-        let withdraw_amount = old_y - new_y;
+        let mut dy = old_y - new_y;
+        let dy_fee = dy * *FEE / *FEE_DENOMINATOR;
 
-        self.transfer(
-            withdraw_address,
-            withdraw_token_address,
-            withdraw_amount,
-        );
+        dy = (dy - dy_fee) * *PRECISION / RATES[withdraw_idx];
+        assert!(dy >= min_withdraw, "Exchange resulted in fewer coins than expected");
+
+        let mut dy_admin_fee = dy_fee * *ADMIN_FEE / *FEE_DENOMINATOR;
+        dy_admin_fee = dy_admin_fee * *PRECISION / RATES[withdraw_idx];
+
+        self.balances[deposit_idx] += dx;
+        self.balances[withdraw_idx] -= dy + dy_admin_fee;
+
+        dy
     }
 
-    ///
     /// Given the amount to withdraw, returns the amount that must be deposited.
-    ///
     pub fn get_dx(
         &self,
         deposit_token_address: Address,
@@ -191,9 +194,10 @@ impl StableSwap {
         let deposit_idx = self.token_position(deposit_token_address);
         let withdraw_idx = self.token_position(withdraw_token_address);
 
-        assert_ne!(self.balances[deposit_idx], 0, "Deposit token balance is zero");
-        assert_ne!(self.balances[withdraw_idx], 0, "Withdraw token balance is zero");
+        assert_ne!(self.balances[deposit_idx], U256::zero(), "Deposit token balance is zero");
+        assert_ne!(self.balances[withdraw_idx], U256::zero(), "Withdraw token balance is zero");
 
+        let balance_array = self.balances;
         let after_withdrawal = self.balances[withdraw_idx] - to_withdraw;
 
         let after_deposit = exchanges::get_y(
@@ -209,9 +213,7 @@ impl StableSwap {
         after_deposit - balance_array[deposit_idx]
     }
 
-    ///
     /// Given the amount to deposit, returns the amount that will be withdrawn.
-    ///
     pub fn get_dy(
         &self,
         deposit_token_address: Address,
@@ -221,13 +223,14 @@ impl StableSwap {
         let deposit_idx = self.token_position(deposit_token_address);
         let withdraw_idx = self.token_position(withdraw_token_address);
 
-        assert_ne!(balance_array[deposit_idx], 0, "Deposit token balance is zero");
-        assert_ne!(balance_array[withdraw_idx], 0, "Withdraw token balance is zero");
+        let balance_array = self.balances;
+        assert_ne!(balance_array[deposit_idx], U256::zero(), "Deposit token balance is zero");
+        assert_ne!(balance_array[withdraw_idx], U256::zero(), "Withdraw token balance is zero");
 
         let after_deposit = self.balances[deposit_idx] + to_deposit;
 
         let after_withdrawal = exchanges::get_y(
-            self.balances,
+            balance_array,
             self.amplifier,
             calculate(self.balances, self.amplifier),
             deposit_idx,
@@ -239,9 +242,9 @@ impl StableSwap {
         balance_array[withdraw_idx] - after_withdrawal
     }
 
-    fn calc_removed_lp_by_withdraw_coins(&self, coins_amounts: [U256;N], max_burn_amount:U256) -> U256{
-
-    }
+    // fn calc_removed_lp_by_withdraw_coins(&self, coins_amounts: [U256;N], max_burn_amount:U256) -> U256{
+    //
+    // }
 
     fn calc_withdraw_coin_lp_by_removing_lp(&self, coin_amount: U256, token_index: usize) -> (U256,U256,U256){
         let amp = self.amplifier;
@@ -257,18 +260,18 @@ impl StableSwap {
             d1,
             token_index,
             None,
-            None
+            None,
             true
         );
         let mut xp_reduced = xp;
-        let fee = FEE * N / (4 * (N - 1));
+        let fee = *FEE * N / (4 * (N - 1));
         for j in 0..N {
             let dx_expected = if j == token_index {
                 xp[j] * d1 / d0 - new_y
             } else {
                 xp[j] - xp[j] * d1 / d0
             };
-            xp_reduced[j] -= fee * dx_expected / FEE_DENOMINATOR;
+            xp_reduced[j] -= fee * dx_expected / *FEE_DENOMINATOR;
         }
         let mut dy = xp_reduced[token_index] - get_y(
             xp_reduced,
@@ -279,8 +282,8 @@ impl StableSwap {
             None,
             true
         );
-        dy = (dy - 1) / PRECISION_MUL[i];
-        let dy_fee = (xp[i] - new_y) / PRECISION_MUL[i];
+        dy = (dy - 1) / PRECISION_MUL[token_index];
+        let dy_fee = (xp[token_index] - new_y) / PRECISION_MUL[token_index];
         (dy, dy_fee, total_supply)
     }
 

@@ -16,35 +16,35 @@ pub fn calculate(
     values: [U256; N],
     amplifier: u64,
 ) -> U256 {
-    let mut sum = ZERO;
+    let mut sum = *ZERO;
     for i in 0..N {
         sum += values[i];
     }
 
-    if sum != ZERO {
-        let mut d_prev = ZERO;
+    if sum != *ZERO {
+        let mut d_prev = *ZERO;
         let mut d = sum;
 
         let amplifier_n: U256 = (amplifier * N as u64).into();
 
         for _n in 0..15 {
-            if (d > d_prev && d - d_prev > ZERO) ||
-                (d <= d_prev && d_prev - d > ZERO) { break; }
+            if (d > d_prev && d - d_prev > *ZERO) ||
+                (d <= d_prev && d_prev - d > *ZERO) { break; }
             let mut d_p = d;
 
             for i in 0..N {
                 // +1 is to prevent division by 0
-                d_p = d_p * d / (values[i] * (N as U256) + 1);
+                d_p = d_p * d / (values[i] * U256::from(N) + 1);
             }
 
             d_prev = d;
-            d = (amplifier_n * sum + d_p * (N as U256)) * d /
-                ((amplifier_n - 1) * d + ((N + 1) as U256) * d_p);
+            d = (amplifier_n * sum + d_p * U256::from(N)) * d /
+                ((amplifier_n - 1) * d + U256::from(N+1) * d_p);
         }
 
         d
     } else {
-        ZERO
+        *ZERO
     }
 }
 

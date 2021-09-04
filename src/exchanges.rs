@@ -2,8 +2,7 @@
 //! The swap consequences calculation.
 //!
 
-use crate::{Address, N, Balance, PRECISION_MUL, ZERO};
-use crate::invariant::calculate;
+use crate::{N, Balance, PRECISION_MUL, ZERO};
 use primitive_types::U256;
 
 /// The token being withdrawn balance get_y the swap.
@@ -16,13 +15,19 @@ pub fn get_y(
     after_x: Option<Balance>,
     is_get_y_d: bool
 ) -> Balance {
+    // D invariant calculation in non-overflowing integer operations
+    // iteratively
+    //
+    // A * sum(x_i) * n**n + D = A * D * n**n + D**(n+1) / (n**n * prod(x_i))
+    //
+    // Converging solution:
+    // D[j+1] = (A * n**n * sum(x_i) - D[j]**(n+1) / (n**n prod(x_i))) / (A * n**n - 1)
     assert!((is_get_y_d && token_y_idx.is_none()) || (!is_get_y_d && token_y_idx.is_some()));
-    assert_ne!(token_x_idx, token_y_idx, "Cannot exchange between the same coins");
-    assert!(0 <= token_x_idx && token_x_idx < N, "There is no x token Id in the pool");
-    assert!(0 <= token_y_idx.unwrap() && token_y_idx.unwrap() < N, "There is no y token Id in the pool");
-    
-    //  
-    balances.iter_mut().for_each(|balance| *balance *= PRECISION_MUL);
+    assert_ne!(token_x_idx, token_y_idx.unwrap(), "Cannot exchange between the same coins");
+    assert!(token_x_idx < N, "There is no x token Id in the pool");
+    assert!(token_y_idx.unwrap() < N, "There is no y token Id in the pool");
+
+    balances.iter_mut().for_each(|balance| *balance *= PRECISION_MUL[0]);
 
     let an: U256 = (amplifier * N as u64).into();
 
@@ -30,7 +35,7 @@ pub fn get_y(
     // let y_magnitude_diff = tokens[token_y_idx].magnitude_diff() * PRECISION_MUL;
 
     let mut c = d;
-    let mut s: Balance = ZERO;
+    let mut s= *ZERO;
     // let after_x_p = after_x * x_magnitude_diff;
 
     for i in 0..N {
@@ -40,7 +45,7 @@ pub fn get_y(
             } else { continue; }
         } else {
             if i == token_x_idx {
-                after_x
+                after_x.unwrap()
             } else if i != token_y_idx.unwrap() {
                 balances[i]
             } else { continue; }
@@ -54,7 +59,7 @@ pub fn get_y(
     let b: Balance = s + d / an;
     let mut y = d;
     for _ in 0..255{
-        let y_next = (y * y + c) / (2 * y + b - d);
+        let y_next = (y * y + c) / (U256::from(2) * y + b - d);
 
         if (y > y_next && y - y_next > U256::one())
             || (y <= y_next && y_next - y > U256::one()) {
@@ -68,12 +73,15 @@ pub fn get_y(
 
 #[test]
 fn ok_equal_precision() {
+    let balances = [U256::from(1_000);N];
+    let amp = 100;
     let new_y = get_y(
-        [1_000 as Balance, 1_000 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances, amp),
         0,
         Some(1),
-        1_050 as Balance,
+        1_050.into(),
         false,
     );
 
@@ -82,12 +90,15 @@ fn ok_equal_precision() {
 
 #[test]
 fn ok_equal_precision_amplified() {
+    let balances = [U256::from(1_000_000);N];
+    let amp = 100;
     let new_y = get_y(
-        [1_E6 as Balance, 1_E6 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances, amp),
         0,
         Some(1),
-        1_900_000 as Balance,
+        Some(U256::from(1_900_000)),
         false,
     );
 
@@ -96,12 +107,15 @@ fn ok_equal_precision_amplified() {
 
 #[test]
 fn ok_different_precision_lesser_bigger() {
+    let balances = [U256::from(1_000_000), U256::from(10).pow(18.into())];
+    let amp = 100;
     let new_y = get_y(
         [1_E6 as Balance, 1_E18 as Balance],
-        100 as u64,
+        amp,
+        crate::calculate(balances,amp),
         0,
         Some(1),
-        1.050_E6 as Balance,
+        Some(U256::from(1_050_000)),
         false,
     );
 
@@ -110,12 +124,15 @@ fn ok_different_precision_lesser_bigger() {
 
 #[test]
 fn ok_different_precision_lesser_bigger_amplified() {
+    let balances = [U256::from(1_000_000), U256::from(10).pow(18.into())];
+    let amp = 100;
     let new_y = get_y(
-        [1_E6 as Balance, 1_E18 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances,amp),
         0,
         Some(1),
-        1.950_E6 as Balance,
+        Some(U256::from(1_950_000)),
         false,
     );
 
@@ -124,12 +141,15 @@ fn ok_different_precision_lesser_bigger_amplified() {
 
 #[test]
 fn ok_different_precision_bigger_lesser() {
+    let balances = [U256::from(10).pow(18.into()),U256::from(1_000_000)];
+    let amp = 100;
     let new_y = get_y(
-        [1_E18 as Balance, 1_E6 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances,amp),
         0,
         Some(1),
-        1.050_E18 as Balance,
+        Some(U256::from(1_050) * U256::from(10).pow(15.into())),
         false,
     );
 
@@ -138,12 +158,18 @@ fn ok_different_precision_bigger_lesser() {
 
 #[test]
 fn ok_different_precision_bigger_lesser_amplified() {
+    let balances = [
+        U256::from(10).pow(18.into()),
+        U256::from(10).pow(6.into()),
+    ];
+    let amp = 100;
     let new_y = get_y(
-        [1_E18 as Balance, 1_E6 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances, amp),
         0,
         Some(1),
-        1.950_E18 as Balance,
+        Some(U256::from(1.950)),
         false,
     );
 
@@ -153,12 +179,15 @@ fn ok_different_precision_bigger_lesser_amplified() {
 #[test]
 #[should_panic]
 fn error_same_tokens() {
+    let balances = [U256::from(1000);N];
+    let amp = 100;
     get_y(
-        [1E3 as Balance, 1E3 as Balance],
-        100 as u64,
+        balances,
+        amp,
+        crate::calculate(balances, amp),
+        1,
         Some(1),
-        Some(1),
-        100 as Balance,
+        Some(Balance::from(100)),
         false,
     );
 }

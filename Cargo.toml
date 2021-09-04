@@ -7,7 +7,8 @@ edition = "2018"
 
 [dependencies]
 roots = "0.0.7"
-
+franklin_crypto = { package = "franklin-crypto", version = "0.0.5", git = "https://github.com/zk-liangliang/franklin-crypto.git", branch="beta", features = ["multicore", "plonk"]}
+lazy_static = "1.4.0"
 
 [dependencies.primitive-types]
 version = "0.9"
