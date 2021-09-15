@@ -110,6 +110,7 @@ impl StableSwap {
             d2
         };
         assert!(lp_quantity >= min_lp_quantity, "Slippage screwed you");
+        self.total_supply += lp_quantity;
 
         lp_quantity
     }
@@ -158,7 +159,7 @@ impl StableSwap {
         let new_x = balance_array[deposit_idx] + dx;
         let new_y = exchanges::get_y(
             balance_array,
-            self.amplifier,
+             self.amplifier,
             calculate(balance_array, self.amplifier),
             deposit_idx,
             Some(withdraw_idx),

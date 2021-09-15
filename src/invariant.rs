@@ -16,6 +16,13 @@ pub fn calculate(
     values: [U256; N],
     amplifier: u64,
 ) -> U256 {
+    // D invariant calculation in non-overflowing integer operations
+    // iteratively
+    //
+    // A * sum(x_i) * n**n + D = A * D * n**n + D**(n+1) / (n**n * prod(x_i))
+    //
+    // Converging solution:
+    // D[j+1] = (A * n**n * sum(x_i) - D[j]**(n+1) / (n**n prod(x_i))) / (A * n**n - 1)
     let mut sum = *ZERO;
     for i in 0..N {
         sum += values[i];
@@ -34,7 +41,7 @@ pub fn calculate(
 
             for i in 0..N {
                 // +1 is to prevent division by 0
-                d_p = d_p * d / (values[i] * U256::from(N) + 1);
+                d_p = d_p * d / (values[i] * U256::from(N + 1) );
             }
 
             d_prev = d;

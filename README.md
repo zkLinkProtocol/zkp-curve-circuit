@@ -1,4 +1,4 @@
-# zkp-curveV1-circuit
+# zkp-curvev1-circuit
 Rewrite **Curve V1** using *Rust* and *Plonk Circuit*.
 ## Overview
 [Curve](https://www.curve.fi/) is an exchange liquidity pool on Ethereum designed for extremely efficient stablecoin trading and low risk, supplemental fee income for liquidity providers, without an opportunity cost.

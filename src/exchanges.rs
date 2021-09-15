@@ -15,13 +15,14 @@ pub fn get_y(
     after_x: Option<Balance>,
     is_get_y_d: bool
 ) -> Balance {
-    // D invariant calculation in non-overflowing integer operations
-    // iteratively
+    // Calculate x[j] if one makes x[i] = x
     //
-    // A * sum(x_i) * n**n + D = A * D * n**n + D**(n+1) / (n**n * prod(x_i))
+    // Done by solving quadratic equation iteratively.
+    // x_1**2 + x_1 * (sum' - (A*n**n - 1) * D / (A * n**n)) = D ** (n + 1) / (n ** (2 * n) * prod' * A)
+    // x_1**2 + b*x_1 = c
     //
-    // Converging solution:
-    // D[j+1] = (A * n**n * sum(x_i) - D[j]**(n+1) / (n**n prod(x_i))) / (A * n**n - 1)
+    // x_1 = (x_1**2 + c) / (2*x_1 + b)
+
     assert!((is_get_y_d && token_y_idx.is_none()) || (!is_get_y_d && token_y_idx.is_some()));
     assert_ne!(token_x_idx, token_y_idx.unwrap(), "Cannot exchange between the same coins");
     assert!(token_x_idx < N, "There is no x token Id in the pool");
@@ -39,7 +40,7 @@ pub fn get_y(
     // let after_x_p = after_x * x_magnitude_diff;
 
     for i in 0..N {
-        let after_x_p = if is_get_y_d{
+        let after_x_p = if is_get_y_d {
             if i != token_x_idx {
                 balances[i]
             } else { continue; }
