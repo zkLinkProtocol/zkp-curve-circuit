@@ -136,7 +136,6 @@ impl StableSwap {
 
         self.balances[token_index] -= dy + dy_fee * *ADMIN_FEE / *FEE_DENOMINATOR;
         dy
-
     }
 
     /// Exchanges the tokens, consuming some of the `zksync::msg.token_address` and returning
@@ -295,11 +294,11 @@ impl StableSwap {
         let mut found = false;
 
         for i in 0..N {
-            if !found{ break; }
             if self.tokens[i] == token_address {
                 position = i;
                 found = true;
             }
+            if !found{ break; }
         }
 
         assert!(found, "The token is not being traded in this pool");

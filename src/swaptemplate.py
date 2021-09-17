@@ -485,7 +485,7 @@ def exchange(i: int128, j: int128, _dx: uint256, _min_dy: uint256) -> uint256:
             convert(self, bytes32),
             convert(_dx, bytes32),
         ),
-        max_outsize=32,
+        max_outsize = 32,
     )
     if len(_response) > 0:
         assert convert(_response, bool)
@@ -497,7 +497,7 @@ def exchange(i: int128, j: int128, _dx: uint256, _min_dy: uint256) -> uint256:
             convert(msg.sender, bytes32),
             convert(dy, bytes32),
         ),
-        max_outsize=32,
+        max_outsize = 32,
     )
     if len(_response) > 0:
         assert convert(_response, bool)
